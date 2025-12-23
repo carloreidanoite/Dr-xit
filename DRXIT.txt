@@ -1,0 +1,1188 @@
+-- [AIMBOT PRO] UI LIBRARY PROFISSIONAL PARA ROBLOX
+-- UI Redesenhada: Branco, Preto e Vermelho com animações RGB
+
+local Players = game:GetService("Players")
+local uis = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local gui = Instance.new("ScreenGui")
+gui.Name = "GeloUI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Botão de Gelo
+local Botao = Instance.new("TextButton")
+Botao.Name = "GeloButton"
+Botao.Size = UDim2.new(0, 50, 0, 50)
+Botao.Position = UDim2.new(0.9, -25, 0.7, -25)
+Botao.BackgroundColor3 = Color3.fromRGB(220, 20, 20)
+Botao.Text = ""
+Botao.Font = Enum.Font.GothamBold
+Botao.TextColor3 = Color3.new(1, 1, 1)
+Botao.TextSize = 20
+Botao.BorderSizePixel = 0
+Botao.AutoButtonColor = true
+Botao.BackgroundTransparency = 0
+Botao.ClipsDescendants = true
+Botao.ZIndex = 2
+Botao.Parent = gui
+
+local UICorner = Instance.new("UICorner", Botao)
+UICorner.CornerRadius = UDim.new(1, 0)
+
+-- Variáveis do arrasto
+local arrastando = false
+local travado = false
+local offset = Vector2.new()
+
+Botao.InputBegan:Connect(function(input)
+	if not travado and input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		arrastando = true
+		offset = input.Position - Botao.AbsolutePosition
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if arrastando and not travado then
+		local mousePos = uis:GetMouseLocation()
+		local novaPos = Vector2.new(mousePos.X, mousePos.Y) - offset
+		Botao.Position = UDim2.new(0, novaPos.X, 0, novaPos.Y)
+	end
+end)
+
+uis.InputEnded:Connect(function(input)
+	if arrastando and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+		arrastando = false
+		travado = true
+	end
+end)
+
+Botao.Activated:Connect(function()
+	local char = player.Character or player.CharacterAdded:Wait()
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		local root = char.HumanoidRootPart
+		local frente = root.CFrame.LookVector * 6
+		local pos = root.Position + frente
+
+		local args = {
+			[1] = pos
+		}
+
+		game:GetService("ReplicatedStorage").Eventos.Ice:FireServer(unpack(args))
+	end
+end)
+
+
+local Library = {}
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local plr = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+local mouse = plr:GetMouse()
+
+local enabled = false
+local rageMode = false
+local espEnabled = false
+local FOV_RADIUS = 50
+local SHOT_DELAY = 0.2
+local lastShotTime = 0
+local espObjects = {}
+
+local showBox = true
+local showLine = true
+local showName = true
+local showHealth = true
+local showDistance = true
+
+local ammoInfiniteEnabled = false
+local noRecoilEnabled = false
+local shotCooldownValue = 0.05
+
+-- Cor vermelha escura fixa para ESP
+local ESP_COLOR = Color3.fromRGB(180, 20, 20)
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Visible = true
+
+local targetText = Drawing.new("Text")
+targetText.Size = 16
+targetText.Position = Vector2.new(10, 90)
+targetText.Color = Color3.fromRGB(255, 255, 255)
+targetText.Outline = true
+targetText.Visible = false
+
+local statusText = Drawing.new("Text")
+statusText.Size = 14
+statusText.Position = Vector2.new(10, 110)
+statusText.Color = Color3.fromRGB(255, 255, 255)
+statusText.Outline = true
+statusText.Visible = false
+
+local ammoConnections = {}
+local function toggleInfiniteAmmo(state)
+    ammoInfiniteEnabled = state
+    
+    for _, connection in pairs(ammoConnections) do
+        if connection then connection:Disconnect() end
+    end
+    ammoConnections = {}
+    
+    if state then
+        local function applyInfiniteAmmo(weapon)
+            if not weapon or not weapon:IsA("Tool") then return end
+            
+            local ammo = weapon:FindFirstChild("CurrentAmmo")
+            if ammo and ammo:IsA("NumberValue") then
+                ammo.Value = 42
+                
+                local connection = ammo.Changed:Connect(function()
+                    if ammoInfiniteEnabled and ammo.Value ~= 42 then
+                        ammo.Value = 42
+                    end
+                end)
+                table.insert(ammoConnections, connection)
+                
+                local watchdogConnection
+                watchdogConnection = RunService.Heartbeat:Connect(function()
+                    if not ammoInfiniteEnabled then
+                        watchdogConnection:Disconnect()
+                        return
+                    end
+                    if ammo.Parent and ammo.Value ~= 42 then
+                        ammo.Value = 42
+                    end
+                end)
+                table.insert(ammoConnections, watchdogConnection)
+            end
+        end
+        
+        local function monitorWorkspace()
+            for _, obj in pairs(workspace:GetChildren()) do
+                if obj.Name == "UMP45" and obj:IsA("Tool") then
+                    applyInfiniteAmmo(obj)
+                end
+            end
+            
+            local workspaceConnection = workspace.ChildAdded:Connect(function(child)
+                if ammoInfiniteEnabled and child.Name == "UMP45" and child:IsA("Tool") then
+                    wait(0.1)
+                    applyInfiniteAmmo(child)
+                end
+            end)
+            table.insert(ammoConnections, workspaceConnection)
+        end
+        
+        local function monitorBackpack()
+            local backpack = plr:FindFirstChild("Backpack")
+            if backpack then
+                for _, obj in pairs(backpack:GetChildren()) do
+                    if obj.Name == "UMP45" and obj:IsA("Tool") then
+                        applyInfiniteAmmo(obj)
+                    end
+                end
+                
+                local backpackConnection = backpack.ChildAdded:Connect(function(child)
+                    if ammoInfiniteEnabled and child.Name == "UMP45" and child:IsA("Tool") then
+                        wait(0.1)
+                        applyInfiniteAmmo(child)
+                    end
+                end)
+                table.insert(ammoConnections, backpackConnection)
+            end
+        end
+        
+        local function onCharacterAdded(character)
+            if not ammoInfiniteEnabled then return end
+            
+            local backpack = plr:WaitForChild("Backpack", 10)
+            if backpack then
+                monitorBackpack()
+            end
+            
+            local toolConnection = character.ChildAdded:Connect(function(child)
+                if ammoInfiniteEnabled and child.Name == "UMP45" and child:IsA("Tool") then
+                    wait(0.1)
+                    applyInfiniteAmmo(child)
+                end
+            end)
+            table.insert(ammoConnections, toolConnection)
+        end
+        
+        if plr.Character then
+            onCharacterAdded(plr.Character)
+        end
+        
+        local characterConnection = plr.CharacterAdded:Connect(onCharacterAdded)
+        table.insert(ammoConnections, characterConnection)
+        
+        monitorWorkspace()
+        
+        spawn(function()
+            while ammoInfiniteEnabled do
+                for _, obj in pairs(workspace:GetChildren()) do
+                    if obj.Name == "UMP45" and obj:IsA("Tool") then
+                        local ammo = obj:FindFirstChild("CurrentAmmo")
+                        if ammo and ammo:IsA("NumberValue") and ammo.Value ~= 42 then
+                            ammo.Value = 42
+                        end
+                    end
+                end
+                
+                if plr:FindFirstChild("Backpack") then
+                    for _, obj in pairs(plr.Backpack:GetChildren()) do
+                        if obj.Name == "UMP45" and obj:IsA("Tool") then
+                            local ammo = obj:FindFirstChild("CurrentAmmo")
+                            if ammo and ammo:IsA("NumberValue") and ammo.Value ~= 42 then
+                                ammo.Value = 42
+                            end
+                        end
+                    end
+                end
+                
+                if plr.Character then
+                    local equippedWeapon = plr.Character:FindFirstChild("UMP45")
+                    if equippedWeapon and equippedWeapon:IsA("Tool") then
+                        local ammo = equippedWeapon:FindFirstChild("CurrentAmmo")
+                        if ammo and ammo:IsA("NumberValue") and ammo.Value ~= 42 then
+                            ammo.Value = 42
+                        end
+                    end
+                end
+                
+                wait(0.5)
+            end
+        end)
+    end
+end
+
+local function toggleNoRecoil(state)
+    noRecoilEnabled = state
+    if state then
+        local function protectForPlayer(player)
+            local backpack = player:WaitForChild("Backpack", 10)
+            local UMP45 = backpack:FindFirstChild("UMP45") or backpack:WaitForChild("UMP45", 15)
+            if not UMP45 then return end
+
+            local config = UMP45:FindFirstChild("Configuration") or UMP45:WaitForChild("Configuration", 10)
+            if not config then return end
+
+            local obj = config:FindFirstChild("TotalRecoilMax") or config:WaitForChild("TotalRecoilMax", 5)
+            if not obj then return end
+
+            if obj:IsA("NumberValue") then
+                obj.Value = 0
+                obj.Changed:Connect(function()
+                    if noRecoilEnabled and obj.Value ~= 0 then
+                        obj.Value = 0
+                    end
+                end)
+
+                task.spawn(function()
+                    while noRecoilEnabled and player.Parent do
+                        if obj.Value ~= 0 then
+                            obj.Value = 0
+                        end
+                        task.wait(0.2)
+                    end
+                end)
+            end
+        end
+        spawn(function() protectForPlayer(plr) end)
+    end
+end
+
+local function applyShotCooldown(value)
+    shotCooldownValue = value
+    local function protectForPlayer(player)
+        local backpack = player:WaitForChild("Backpack", 10)
+        local UMP45 = backpack:FindFirstChild("UMP45") or backpack:WaitForChild("UMP45", 15)
+        if not UMP45 then return end
+
+        local config = UMP45:FindFirstChild("Configuration") or UMP45:WaitForChild("Configuration", 10)
+        if not config then return end
+
+        local obj = config:FindFirstChild("ShotCooldown") or config:WaitForChild("ShotCooldown", 5)
+        if not obj then return end
+
+        if obj:IsA("NumberValue") then
+            obj.Value = value
+            obj.Changed:Connect(function()
+                if obj.Value ~= value then
+                    obj.Value = value
+                end
+            end)
+
+            task.spawn(function()
+                while player.Parent do
+                    if obj.Value ~= value then
+                        obj.Value = value
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+    spawn(function() protectForPlayer(plr) end)
+end
+
+local function createESP(player)
+    if player == plr or espObjects[player] then return end
+    
+    local quad = Drawing.new("Quad")
+    local line = Drawing.new("Line")
+    local name = Drawing.new("Text")
+    local health = Drawing.new("Text")
+    local distance = Drawing.new("Text")
+
+    quad.Thickness = 2
+    quad.Filled = false
+    quad.Visible = false
+    
+    line.Thickness = 1.5
+    line.Visible = false
+    
+    name.Size = 14
+    name.Outline = true
+    name.Center = true
+    name.Visible = false
+    
+    health.Size = 13
+    health.Outline = true
+    health.Center = true
+    health.Visible = false
+    
+    distance.Size = 13
+    distance.Outline = true
+    distance.Center = true
+    distance.Visible = false
+
+    espObjects[player] = {
+        Box = quad,
+        Line = line,
+        Name = name,
+        Health = health,
+        Distance = distance
+    }
+end
+
+local function isVisible(from, part)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.FilterDescendantsInstances = {plr.Character}
+    local result = workspace:Raycast(from, (part.Position - from).Unit * 500, rayParams)
+    return result and result.Instance and result.Instance:IsDescendantOf(part.Parent)
+end
+
+local function getClosestTarget()
+    local closest, shortest = nil, FOV_RADIUS
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= plr and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local pos, onScreen = cam:WorldToViewportPoint(head.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - fovCircle.Position).Magnitude
+                if dist < shortest then
+                    shortest, closest = dist, p
+                end
+            end
+        end
+    end
+    return closest
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    if espObjects[player] then
+        for _, obj in pairs(espObjects[player]) do
+            obj:Remove()
+        end
+        espObjects[player] = nil
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    -- FOV Circle com cor vermelha escura fixa
+    fovCircle.Color = ESP_COLOR
+    fovCircle.Position = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    fovCircle.Radius = FOV_RADIUS
+
+    -- ESP System com cor vermelha escura fixa
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= plr and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Head") then
+            createESP(player)
+            local esp = espObjects[player]
+            local char = player.Character
+            local hrp, head, humanoid = char.HumanoidRootPart, char.Head, char:FindFirstChild("Humanoid")
+            local tl = cam:WorldToViewportPoint(hrp.Position + Vector3.new(-2, 3, 0))
+            local tr = cam:WorldToViewportPoint(hrp.Position + Vector3.new(2, 3, 0))
+            local bl = cam:WorldToViewportPoint(hrp.Position + Vector3.new(-2, -3, 0))
+            local br = cam:WorldToViewportPoint(hrp.Position + Vector3.new(2, -3, 0))
+            local center = cam:WorldToViewportPoint(hrp.Position)
+
+            if espEnabled and tl.Z > 0 and tr.Z > 0 and bl.Z > 0 and br.Z > 0 then
+                if showBox then
+                    esp.Box.Visible = true
+                    esp.Box.PointA = Vector2.new(tl.X, tl.Y)
+                    esp.Box.PointB = Vector2.new(tr.X, tr.Y)
+                    esp.Box.PointC = Vector2.new(br.X, br.Y)
+                    esp.Box.PointD = Vector2.new(bl.X, bl.Y)
+                    esp.Box.Color = ESP_COLOR
+                else
+                    esp.Box.Visible = false
+                end
+
+                if showLine then
+                    esp.Line.Visible = true
+                    esp.Line.From = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
+                    esp.Line.To = Vector2.new(center.X, center.Y)
+                    esp.Line.Color = ESP_COLOR
+                else
+                    esp.Line.Visible = false
+                end
+
+                if showName then
+                    esp.Name.Visible = true
+                    esp.Name.Position = Vector2.new(center.X, center.Y - 60)
+                    esp.Name.Text = player.Name
+                    esp.Name.Color = ESP_COLOR
+                else
+                    esp.Name.Visible = false
+                end
+
+                if showHealth then
+                    esp.Health.Visible = true
+                    esp.Health.Position = Vector2.new(center.X, center.Y - 40)
+                    esp.Health.Text = "HP " .. math.floor(humanoid.Health)
+                    esp.Health.Color = ESP_COLOR
+                else
+                    esp.Health.Visible = false
+                end
+
+                if showDistance then
+                    local dist = math.floor((hrp.Position - cam.CFrame.Position).Magnitude)
+                    esp.Distance.Visible = true
+                    esp.Distance.Position = Vector2.new(center.X, center.Y - 20)
+                    esp.Distance.Text = "Distância " .. dist .. "m"
+                    esp.Distance.Color = ESP_COLOR
+                else
+                    esp.Distance.Visible = false
+                end
+            else
+                for _, obj in pairs(esp) do
+                    obj.Visible = false
+                end
+            end
+        end
+    end
+
+    if not enabled and not rageMode then
+        targetText.Visible = false
+        statusText.Visible = false
+        return
+    end
+    
+    if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") or not plr.Character:FindFirstChild("Humanoid") then
+        targetText.Visible = false
+        statusText.Visible = true
+        statusText.Text = "Aguardando spawn..."
+        statusText.Color = Color3.fromRGB(255, 255, 85)
+        return
+    end
+    
+    local humanoid = plr.Character:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
+        targetText.Visible = false
+        statusText.Visible = true
+        statusText.Text = "Morto - Aimbot desativado"
+        statusText.Color = Color3.fromRGB(255, 85, 85)
+        return
+    end
+    
+    local weapon = plr.Character:FindFirstChildWhichIsA("Tool")
+    if not weapon then
+        targetText.Visible = false
+        statusText.Visible = true
+        statusText.Text = "Sem Arma - Equipe uma arma"
+        statusText.Color = Color3.fromRGB(255, 170, 85)
+        return
+    end
+    
+    statusText.Visible = false
+    
+    if tick() - lastShotTime < SHOT_DELAY then return end
+
+    local target = getClosestTarget()
+    if target and target.Character then
+        local function getTargetPart(character)
+            local head = character:FindFirstChild("Head")
+            local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+
+            if not head or not torso then return nil end
+
+            -- RAGE MODE: sempre cabeça (100%)
+            if rageMode then
+                return head
+            end
+            
+            -- LEGIT MODE: 25% cabeça, 75% peito
+            local chance = math.random()
+            if chance <= 0.25 then
+                return head
+            else
+                return torso
+            end
+        end
+
+        local bodyPart = getTargetPart(target.Character)
+        local humanoid = target.Character:FindFirstChild("Humanoid")
+
+        if bodyPart and humanoid and isVisible(plr.Character.Head.Position, bodyPart) then
+            targetText.Visible = true
+            targetText.Text = "Alvo: " .. target.Name .. (rageMode and " [RAGE]" or " [LEGIT]")
+
+            local args = {
+                [1] = weapon,
+                [2] = {
+                    ["p"] = bodyPart.Position,
+                    ["pid"] = 1,
+                    ["part"] = bodyPart,
+                    ["d"] = (plr.Character.Head.Position - bodyPart.Position).Magnitude,
+                    ["maxDist"] = 999,
+                    ["h"] = humanoid,
+                    ["m"] = Enum.Material.Plastic,
+                    ["sid"] = 5,
+                    ["t"] = tick() % 1,
+                    ["n"] = (bodyPart.Position - plr.Character.Head.Position).Unit
+                }
+            }
+
+            if ReplicatedStorage:FindFirstChild("WeaponsSystem") then
+                ReplicatedStorage.WeaponsSystem.Network.W__it:FireServer(unpack(args))
+            end
+            lastShotTime = tick()
+        else
+            targetText.Visible = false
+        end
+    else
+        targetText.Visible = false
+    end
+end)
+
+-- ===== UI LIBRARY REDESENHADA =====
+function Library:CreateWindow(options)
+    local Window = {}
+    
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "UILibrary"
+    ScreenGui.Parent = plr.PlayerGui
+    ScreenGui.ResetOnSpawn = false
+    
+    local Main = Instance.new("Frame")
+    Main.Name = "Main"
+    Main.Parent = ScreenGui
+    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Main.BorderSizePixel = 0
+    Main.Position = UDim2.new(0.5, -200, 0.5, -150)
+    Main.Size = UDim2.new(0, 400, 0, 300)
+    Main.ClipsDescendants = true
+    
+    Window.Main = Main
+    
+    local BorderStroke = Instance.new("UIStroke")
+    BorderStroke.Parent = Main
+    BorderStroke.Color = Color3.fromRGB(255, 255, 255)
+    BorderStroke.Thickness = 3
+    
+    spawn(function()
+        local t = 0
+        while wait() do
+            t = t + 0.02
+            local r = math.abs(math.sin(t)) * 235 + 20
+            local g = math.abs(math.sin(t)) * 255
+            local b = math.abs(math.sin(t)) * 255
+            BorderStroke.Color = Color3.fromRGB(r, g, b)
+        end
+    end)
+    
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Main
+    
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Parent = Main
+    TitleBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Size = UDim2.new(1, 0, 0, 40)
+    
+    local TitleCorner = Instance.new("UICorner")
+    TitleCorner.CornerRadius = UDim.new(0, 12)
+    TitleCorner.Parent = TitleBar
+    
+    local Title = Instance.new("TextLabel")
+    Title.Name = "Title"
+    Title.Parent = TitleBar
+    Title.BackgroundTransparency = 1
+    Title.Position = UDim2.new(0, 15, 0, 0)
+    Title.Size = UDim2.new(1, -80, 1, 0)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = options.Name or "UI Library"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextSize = 16
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "CloseButton"
+    CloseButton.Parent = TitleBar
+    CloseButton.BackgroundColor3 = Color3.fromRGB(220, 20, 20)
+    CloseButton.BorderSizePixel = 0
+    CloseButton.Position = UDim2.new(1, -30, 0, 10)
+    CloseButton.Size = UDim2.new(0, 20, 0, 20)
+    CloseButton.Font = Enum.Font.GothamBold
+    CloseButton.Text = "X"
+    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseButton.TextSize = 12
+    
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 5)
+    CloseCorner.Parent = CloseButton
+    
+    local Content = Instance.new("Frame")
+    Content.Name = "Content"
+    Content.Parent = Main
+    Content.BackgroundTransparency = 1
+    Content.Position = UDim2.new(0, 10, 0, 50)
+    Content.Size = UDim2.new(1, -20, 1, -60)
+    
+    local ScrollingFrame = Instance.new("ScrollingFrame")
+    ScrollingFrame.Name = "ScrollingFrame"
+    ScrollingFrame.Parent = Content
+    ScrollingFrame.Active = true
+    ScrollingFrame.BackgroundTransparency = 1
+    ScrollingFrame.BorderSizePixel = 0
+    ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
+    ScrollingFrame.ScrollBarThickness = 4
+    ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(220, 20, 20)
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Parent = ScrollingFrame
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    Layout.Padding = UDim.new(0, 5)
+    
+    local MinimizeButton = Instance.new("TextButton")
+    MinimizeButton.Name = "MinimizeButton"
+    MinimizeButton.Parent = TitleBar
+    MinimizeButton.BackgroundColor3 = Color3.fromRGB(220, 20, 20)
+    MinimizeButton.BorderSizePixel = 0
+    MinimizeButton.Position = UDim2.new(1, -55, 0, 10)
+    MinimizeButton.Size = UDim2.new(0, 20, 0, 20)
+    MinimizeButton.Font = Enum.Font.GothamBold
+    MinimizeButton.Text = "-"
+    MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MinimizeButton.TextSize = 16
+    
+    local MinimizeCorner = Instance.new("UICorner")
+    MinimizeCorner.CornerRadius = UDim.new(0, 5)
+    MinimizeCorner.Parent = MinimizeButton
+    
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    local isMinimized = false
+    
+    local function startDrag(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = Main.Position
+        end
+    end
+    
+    local function updateDrag(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end
+    
+    local function endDrag(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end
+    
+    TitleBar.InputBegan:Connect(startDrag)
+    UserInputService.InputChanged:Connect(updateDrag)
+    UserInputService.InputEnded:Connect(endDrag)
+    
+    MinimizeButton.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        
+        if isMinimized then
+            TweenService:Create(Main, TweenInfo.new(0.3), {Size = UDim2.new(0, 400, 0, 40)}):Play()
+            MinimizeButton.Text = "+"
+            Content.Visible = false
+        else
+            TweenService:Create(Main, TweenInfo.new(0.3), {Size = UDim2.new(0, 400, 0, 300)}):Play()
+            MinimizeButton.Text = "-"
+            Content.Visible = true
+        end
+    end)
+    
+    CloseButton.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+    
+    function Window:CreateToggle(options)
+        local Toggle = Instance.new("Frame")
+        Toggle.Name = "Toggle"
+        Toggle.Parent = ScrollingFrame
+        Toggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        Toggle.BorderSizePixel = 0
+        Toggle.Size = UDim2.new(1, 0, 0, 35)
+        
+        local ToggleCorner = Instance.new("UICorner")
+        ToggleCorner.CornerRadius = UDim.new(0, 8)
+        ToggleCorner.Parent = Toggle
+        
+        local ToggleLabel = Instance.new("TextLabel")
+        ToggleLabel.Name = "ToggleLabel"
+        ToggleLabel.Parent = Toggle
+        ToggleLabel.BackgroundTransparency = 1
+        ToggleLabel.Position = UDim2.new(0, 10, 0, 0)
+        ToggleLabel.Size = UDim2.new(1, -50, 1, 0)
+        ToggleLabel.Font = Enum.Font.GothamBold
+        ToggleLabel.Text = options.Name or "Toggle"
+        ToggleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ToggleLabel.TextSize = 13
+        ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local ToggleButton = Instance.new("TextButton")
+        ToggleButton.Name = "ToggleButton"
+        ToggleButton.Parent = Toggle
+        ToggleButton.BackgroundColor3 = options.CurrentValue and Color3.fromRGB(220, 20, 20) or Color3.fromRGB(50, 50, 50)
+        ToggleButton.BorderSizePixel = 0
+        ToggleButton.Position = UDim2.new(1, -30, 0, 7.5)
+        ToggleButton.Size = UDim2.new(0, 20, 0, 20)
+        ToggleButton.Font = Enum.Font.GothamBold
+        ToggleButton.Text = options.CurrentValue and "ON" or "OFF"
+        ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ToggleButton.TextSize = 10
+        
+        local ButtonCorner = Instance.new("UICorner")
+        ButtonCorner.CornerRadius = UDim.new(0, 5)
+        ButtonCorner.Parent = ToggleButton
+        
+        local currentValue = options.CurrentValue or false
+        
+        ToggleButton.MouseButton1Click:Connect(function()
+            currentValue = not currentValue
+            
+            local newColor = currentValue and Color3.fromRGB(220, 20, 20) or Color3.fromRGB(50, 50, 50)
+            local newText = currentValue and "ON" or "OFF"
+            
+            TweenService:Create(ToggleButton, TweenInfo.new(0.2), {BackgroundColor3 = newColor}):Play()
+            ToggleButton.Text = newText
+            
+            if options.Callback then
+                options.Callback(currentValue)
+            end
+        end)
+        
+        return Toggle
+    end
+    
+    function Window:CreateSlider(options)
+        local Slider = Instance.new("Frame")
+        Slider.Name = "Slider"
+        Slider.Parent = ScrollingFrame
+        Slider.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        Slider.BorderSizePixel = 0
+        Slider.Size = UDim2.new(1, 0, 0, 50)
+        
+        local SliderCorner = Instance.new("UICorner")
+        SliderCorner.CornerRadius = UDim.new(0, 8)
+        SliderCorner.Parent = Slider
+        
+        local SliderLabel = Instance.new("TextLabel")
+        SliderLabel.Name = "SliderLabel"
+        SliderLabel.Parent = Slider
+        SliderLabel.BackgroundTransparency = 1
+        SliderLabel.Position = UDim2.new(0, 10, 0, 0)
+        SliderLabel.Size = UDim2.new(1, -20, 0, 20)
+        SliderLabel.Font = Enum.Font.GothamBold
+        SliderLabel.Text = options.Name or "Slider"
+        SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        SliderLabel.TextSize = 13
+        SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local SliderValue = Instance.new("TextLabel")
+        SliderValue.Name = "SliderValue"
+        SliderValue.Parent = Slider
+        SliderValue.BackgroundTransparency = 1
+        SliderValue.Position = UDim2.new(0, 10, 0, 0)
+        SliderValue.Size = UDim2.new(1, -20, 0, 20)
+        SliderValue.Font = Enum.Font.GothamBold
+        SliderValue.Text = tostring(options.CurrentValue or 0) .. (options.Suffix or "")
+        SliderValue.TextColor3 = Color3.fromRGB(220, 20, 20)
+        SliderValue.TextSize = 13
+        SliderValue.TextXAlignment = Enum.TextXAlignment.Right
+        
+        local SliderTrack = Instance.new("Frame")
+        SliderTrack.Name = "SliderTrack"
+        SliderTrack.Parent = Slider
+        SliderTrack.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        SliderTrack.BorderSizePixel = 0
+        SliderTrack.Position = UDim2.new(0, 10, 0, 25)
+        SliderTrack.Size = UDim2.new(1, -20, 0, 15)
+        
+        local TrackCorner = Instance.new("UICorner")
+        TrackCorner.CornerRadius = UDim.new(0, 8)
+        TrackCorner.Parent = SliderTrack
+        
+        local SliderFill = Instance.new("Frame")
+        SliderFill.Name = "SliderFill"
+        SliderFill.Parent = SliderTrack
+        SliderFill.BackgroundColor3 = Color3.fromRGB(220, 20, 20)
+        SliderFill.BorderSizePixel = 0
+        SliderFill.Size = UDim2.new(0, 0, 1, 0)
+        
+        local FillCorner = Instance.new("UICorner")
+        FillCorner.CornerRadius = UDim.new(0, 8)
+        FillCorner.Parent = SliderFill
+        
+        local currentValue = options.CurrentValue or options.Range[1]
+        local minValue = options.Range[1]
+        local maxValue = options.Range[2]
+        local increment = options.Increment or 1
+        
+        local function updateSlider(value)
+            value = math.clamp(value, minValue, maxValue)
+            value = math.floor(value / increment) * increment
+            currentValue = value
+            
+            local percentage = (value - minValue) / (maxValue - minValue)
+            SliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+            SliderValue.Text = tostring(value) .. (options.Suffix or "")
+            
+            if options.Callback then
+                options.Callback(value)
+            end
+        end
+        
+        updateSlider(currentValue)
+        
+        local dragging = false
+        
+        local function startSliderDrag(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                local percentage = math.clamp((input.Position.X - SliderTrack.AbsolutePosition.X) / SliderTrack.AbsoluteSize.X, 0, 1)
+                local value = minValue + (maxValue - minValue) * percentage
+                updateSlider(value)
+            end
+        end
+        
+        local function updateSliderDrag(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local percentage = math.clamp((input.Position.X - SliderTrack.AbsolutePosition.X) / SliderTrack.AbsoluteSize.X, 0, 1)
+                local value = minValue + (maxValue - minValue) * percentage
+                updateSlider(value)
+            end
+        end
+        
+        local function endSliderDrag(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end
+        
+        SliderTrack.InputBegan:Connect(startSliderDrag)
+        UserInputService.InputChanged:Connect(updateSliderDrag)
+        UserInputService.InputEnded:Connect(endSliderDrag)
+        
+        return Slider
+    end
+    
+    function Window:CreateButton(options)
+        local Button = Instance.new("TextButton")
+        Button.Name = "Button"
+        Button.Parent = ScrollingFrame
+        Button.BackgroundColor3 = Color3.fromRGB(220, 20, 20)
+        Button.BorderSizePixel = 0
+        Button.Size = UDim2.new(1, 0, 0, 35)
+        Button.Font = Enum.Font.GothamBold
+        Button.Text = options.Name or "Button"
+        Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Button.TextSize = 14
+        
+        local ButtonCorner = Instance.new("UICorner")
+        ButtonCorner.CornerRadius = UDim.new(0, 8)
+        ButtonCorner.Parent = Button
+        
+        Button.MouseButton1Click:Connect(function()
+            TweenService:Create(Button, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(180, 15, 15)}):Play()
+            wait(0.1)
+            TweenService:Create(Button, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(220, 20, 20)}):Play()
+            
+            if options.Callback then
+                options.Callback()
+            end
+        end)
+        
+        return Button
+    end
+    
+    function Window:CreateTextBox(options)
+        local TextBox = Instance.new("Frame")
+        TextBox.Name = "TextBox"
+        TextBox.Parent = ScrollingFrame
+        TextBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        TextBox.BorderSizePixel = 0
+        TextBox.Size = UDim2.new(1, 0, 0, 50)
+        
+        local TextBoxCorner = Instance.new("UICorner")
+        TextBoxCorner.CornerRadius = UDim.new(0, 8)
+        TextBoxCorner.Parent = TextBox
+        
+        local TextBoxLabel = Instance.new("TextLabel")
+        TextBoxLabel.Name = "TextBoxLabel"
+        TextBoxLabel.Parent = TextBox
+        TextBoxLabel.BackgroundTransparency = 1
+        TextBoxLabel.Position = UDim2.new(0, 10, 0, 0)
+        TextBoxLabel.Size = UDim2.new(1, -20, 0, 20)
+        TextBoxLabel.Font = Enum.Font.GothamBold
+        TextBoxLabel.Text = options.Name or "TextBox"
+        TextBoxLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TextBoxLabel.TextSize = 13
+        TextBoxLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local Input = Instance.new("TextBox")
+        Input.Name = "Input"
+        Input.Parent = TextBox
+        Input.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        Input.BorderSizePixel = 0
+        Input.Position = UDim2.new(0, 10, 0, 25)
+        Input.Size = UDim2.new(1, -20, 0, 20)
+        Input.Font = Enum.Font.Gotham
+        Input.Text = options.CurrentValue or ""
+        Input.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Input.TextSize = 12
+        Input.PlaceholderText = options.PlaceholderText or ""
+        Input.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+        Input.ClearTextOnFocus = false
+        
+        local InputCorner = Instance.new("UICorner")
+        InputCorner.CornerRadius = UDim.new(0, 5)
+        InputCorner.Parent = Input
+        
+        Input.FocusLost:Connect(function(enterPressed)
+            if enterPressed and options.Callback then
+                options.Callback(Input.Text)
+            end
+        end)
+        
+        return TextBox
+    end
+    
+    function Window:CreateSection(name)
+        local Section = Instance.new("TextLabel")
+        Section.Name = "Section"
+        Section.Parent = ScrollingFrame
+        Section.BackgroundTransparency = 1
+        Section.Size = UDim2.new(1, 0, 0, 30)
+        Section.Font = Enum.Font.GothamBold
+        Section.Text = name or "Section"
+        Section.TextColor3 = Color3.fromRGB(220, 20, 20)
+        Section.TextSize = 16
+        Section.TextXAlignment = Enum.TextXAlignment.Left
+        
+        return Section
+    end
+    
+    local function updateCanvas()
+        local contentSize = Layout.AbsoluteContentSize
+        ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y)
+    end
+    
+    Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+    
+    return Window
+end
+
+local Window = Library:CreateWindow({
+    Name = "[AIMBOT PRO] AIMBOT PRO - UI LIBRARY"
+})
+
+Window:CreateSection("Configurações do Aimbot")
+
+Window:CreateToggle({
+    Name = "AIMBOT LEGIT (25% Cabeça / 75% Peito)",
+    CurrentValue = false,
+    Callback = function(value)
+        enabled = value
+        if value and rageMode then
+            rageMode = false
+            print("AIMBOT RAGE desativado automaticamente")
+        end
+        print("AIMBOT LEGIT:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "AIMBOT RAGE (100% Cabeça)",
+    CurrentValue = false,
+    Callback = function(value)
+        rageMode = value
+        if value and enabled then
+            enabled = false
+            print("AIMBOT LEGIT desativado automaticamente")
+        end
+        print("AIMBOT RAGE:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Ativar ESP (Vermelho Escuro)",
+    CurrentValue = false,
+    Callback = function(value)
+        espEnabled = value
+        print("ESP:", value)
+    end
+})
+
+Window:CreateSlider({
+    Name = "Raio do FOV",
+    Range = {1, 300},
+    Increment = 5,
+    Suffix = "px",
+    CurrentValue = 50,
+    Callback = function(value)
+        FOV_RADIUS = value
+        print("FOV Radius:", value)
+    end
+})
+
+Window:CreateSection("ESP Detalhado")
+
+Window:CreateToggle({
+    Name = "Mostrar Box",
+    CurrentValue = true,
+    Callback = function(value)
+        showBox = value
+        print("Show Box:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Mostrar Linha",
+    CurrentValue = true,
+    Callback = function(value)
+        showLine = value
+        print("Show Line:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Mostrar Nome",
+    CurrentValue = true,
+    Callback = function(value)
+        showName = value
+        print("Show Name:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Mostrar Vida (HP)",
+    CurrentValue = true,
+    Callback = function(value)
+        showHealth = value
+        print("Show Health:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Mostrar Distância",
+    CurrentValue = true,
+    Callback = function(value)
+        showDistance = value
+        print("Show Distance:", value)
+    end
+})
+
+Window:CreateSection("Modificações de Arma")
+
+Window:CreateToggle({
+    Name = "Munição Infinita",
+    CurrentValue = false,
+    Callback = function(value)
+        toggleInfiniteAmmo(value)
+        print("Munição Infinita:", value)
+    end
+})
+
+Window:CreateToggle({
+    Name = "Sem Recoil",
+    CurrentValue = false,
+    Callback = function(value)
+        toggleNoRecoil(value)
+        print("Sem Recoil:", value)
+    end
+})
+
+Window:CreateTextBox({
+    Name = "Velocidade dos Disparos",
+    CurrentValue = "0.05",
+    PlaceholderText = "Ex: 0.05 (menor = mais rápido)",
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num >= 0 then
+            shotCooldownValue = num
+            applyShotCooldown(num)
+            print("Velocidade dos Disparos:", num)
+        else
+            print("Valor inválido para velocidade dos disparos!")
+        end
+    end
+})
+
+Window:CreateSection("Ajustes Avançados")
+
+Window:CreateTextBox({
+    Name = "Delay entre Tiros do Aimbot",
+    CurrentValue = "0.2",
+    PlaceholderText = "Ex: 0.2 (segundos)",
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num >= 0 then
+            SHOT_DELAY = num
+            print("SHOT_DELAY atualizado para:", SHOT_DELAY)
+        else
+            print("Valor inválido para delay!")
+        end
+    end
+})
+
+Window:CreateButton({
+    Name = "Resetar Configurações",
+    Callback = function()
+        print("Configurações resetadas!")
+        enabled = false
+        rageMode = false
+        espEnabled = false
+        ammoInfiniteEnabled = false
+        noRecoilEnabled = false
+        FOV_RADIUS = 50
+        SHOT_DELAY = 0.2
+        shotCooldownValue = 0.05
+    end
+})
+
+return Library
